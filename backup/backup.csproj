@@ -9,6 +9,7 @@
     <OutputType>Exe</OutputType>
     <RootNamespace>backup</RootNamespace>
     <AssemblyName>backup</AssemblyName>
+    <TargetFrameworkVersion>v3.5</TargetFrameworkVersion>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|x86' ">
     <DebugSymbols>True</DebugSymbols>
@@ -20,6 +21,7 @@
     <WarningLevel>4</WarningLevel>
     <Externalconsole>True</Externalconsole>
     <PlatformTarget>x86</PlatformTarget>
+    <Commandlineparameters>-restore 260 /home/andrew/recovered /raid/data/FES_descr/География/</Commandlineparameters>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|x86' ">
     <DebugType>none</DebugType>
@@ -35,17 +37,15 @@
     <Reference Include="System.Data" />
     <Reference Include="System.Core" />
     <Reference Include="System.Configuration" />
-    <Reference Include="MySql.Data.Entity">
-      <HintPath>lib\mysql.data.entity.dll</HintPath>
+    <Reference Include="System.Net.FtpClient">
+      <HintPath>lib\System.Net.FtpClient.dll</HintPath>
     </Reference>
+    <Reference Include="System.Xml" />
     <Reference Include="NLog">
       <HintPath>lib\NLog.dll</HintPath>
     </Reference>
     <Reference Include="MySql.Data">
       <HintPath>lib\MySql.Data.dll</HintPath>
-    </Reference>
-    <Reference Include="System.Net.FtpClient">
-      <HintPath>lib\System.Net.FtpClient.dll</HintPath>
     </Reference>
   </ItemGroup>
   <ItemGroup>
@@ -53,15 +53,26 @@
     <Compile Include="AssemblyInfo.cs" />
     <Compile Include="Helper.cs" />
     <Compile Include="Crypto.cs" />
-    <Compile Include="DAL.cs" />
     <Compile Include="BackupFile.cs" />
-    <Compile Include="Worker.cs" />
-    <Compile Include="FtpUploader.cs" />
-    <Compile Include="BackupFileQueued.cs" />
     <Compile Include="BackupFolder.cs" />
     <Compile Include="BackupItem.cs" />
-    <Compile Include="DbItemDataInfo.cs" />
-    <Compile Include="DbItemSearchInfo.cs" />
+    <Compile Include="BackupFileQueue.cs" />
+    <Compile Include="Worker.cs" />
+    <Compile Include="FtpEncryptor.cs" />
+    <Compile Include="DALBasic.cs" />
+    <Compile Include="DAL.cs" />
+    <Compile Include="FileSystemCache.cs" />
+    <Compile Include="Report.cs" />
+    <Compile Include="Filter.cs" />
+    <Compile Include="RecoverInfo.cs" />
+    <Compile Include="IEncryptor.cs" />
+    <Compile Include="IDecryptor.cs" />
+    <Compile Include="FtpDecryptor.cs" />
+    <Compile Include="FtpController.cs" />
+    <Compile Include="RecoverPathException.cs" />
+    <Compile Include="PathToClean.cs" />
+    <Compile Include="PInvokeHelper.cs" />
+    <Compile Include="IOHelper.cs" />
   </ItemGroup>
   <Import Project="$(MSBuildBinPath)\Microsoft.CSharp.targets" />
   <ItemGroup>
@@ -71,10 +82,10 @@
     <None Include="app.config">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
-    <None Include="lib\mysql.data.entity.dll" />
     <None Include="lib\NLog.dll" />
     <None Include="lib\MySql.Data.dll" />
     <None Include="lib\System.Net.FtpClient.dll" />
+    <None Include="lib\log4net.dll" />
   </ItemGroup>
   <ItemGroup>
     <Folder Include="lib\" />

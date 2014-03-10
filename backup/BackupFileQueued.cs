@@ -8,12 +8,12 @@ namespace backup {
 			set;
 		}
 
-		public Action OnWorkerEnds {
+		public Action<BackupFile> OnWorkerEnds {
 			get;
 			set;
 		}
 
-		public BackupFileQueued(BackupFile file, Action onWorkerEnds) {
+		public BackupFileQueued(BackupFile file, Action<BackupFile> onWorkerEnds) {
 			File = file;
 			OnWorkerEnds = onWorkerEnds;
 		}

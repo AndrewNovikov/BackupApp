@@ -1,4 +1,4 @@
-using NLog;
+//using NLog;
 using System;
 using System.IO;
 using System.Text;
@@ -7,7 +7,7 @@ using System.Security.Cryptography;
 
 namespace backup {
 	public static class Crypto {
-		private static readonly Logger LOGGER = LogManager.GetCurrentClassLogger();
+		//private static readonly Logger LOGGER = LogManager.GetCurrentClassLogger();
 		//private static readonly string EmptyMd5 = "00000000000000000000000000000000";
 		public static readonly byte[] EmptyMd5 = new byte[] {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0};
 
@@ -24,24 +24,28 @@ namespace backup {
 			}
 		}
 
-		public static void EncryptFile(string md5, string sourceFileName, Stream destinationStream, string encryptionKey) {
-			using (FileStream source = new FileStream(sourceFileName, FileMode.Open, FileAccess.Read, FileShare.Read)) {
-				InternalEncryptFile(md5, source, destinationStream, encryptionKey);
+		public static long EncryptFile(string md5, string sourceFileName, Stream destinationStream, string encryptionKey) {
+			//using (FileStream source = new FileStream(sourceFileName, FileMode.Open, FileAccess.Read, FileShare.Read)) {
+      using (FileStream source = IOHelper.OpenFile(sourceFileName, FileMode.Open, FileAccess.Read, FileShare.ReadWrite)) {
+				return InternalEncryptFile(md5, source, destinationStream, encryptionKey);
 			}
 		}
 
-		public static void EncryptFile(string md5, string sourceFileName, string destinationFileName, string encryptionKey) {
-			using (FileStream source = new FileStream(sourceFileName, FileMode.Open, FileAccess.Read, FileShare.Read)) {
-				using (FileStream destination = new FileStream(destinationFileName, FileMode.CreateNew, FileAccess.Write, FileShare.None)) {
-					InternalEncryptFile(md5, source, destination, encryptionKey);
+		public static long EncryptFile(string md5, string sourceFileName, string destinationFileName, string encryptionKey) {
+			//using (FileStream source = new FileStream(sourceFileName, FileMode.Open, FileAccess.Read, FileShare.Read)) {
+      using (FileStream source = IOHelper.OpenFile(sourceFileName, FileMode.Open, FileAccess.Read, FileShare.ReadWrite)) {
+				//using (FileStream destination = new FileStream(destinationFileName, FileMode.CreateNew, FileAccess.Write, FileShare.None)) {
+        using (FileStream destination = IOHelper.OpenFile(destinationFileName, FileMode.CreateNew, FileAccess.Write, FileShare.None)) {
+					return InternalEncryptFile(md5, source, destination, encryptionKey);
 				}
 			}
 		}
 
-		private static void InternalEncryptFile(string md5, Stream source, Stream destination, string encryptionKey) {
+		private static long InternalEncryptFile(string md5, Stream source, Stream destination, string encryptionKey) {
 			if (encryptionKey == null || encryptionKey.Length == 0)
 				throw new ArgumentException("encryptionKey");
-			
+			long result = 0;
+
 			using (var provider = new AesCryptoServiceProvider()) {
 				byte[] keyBytes = Sha128String(encryptionKey);
 				provider.KeySize = keyBytes.Length * 8;
@@ -81,10 +85,6 @@ namespace backup {
 									throw new ApplicationException("During calculating md5 no finish of file has been reached");
 							}
 
-							/*if (!md5.SequenceEqual(md5Hasher.Hash)) {
-							throw new ApplicationException("While file was encrypting it was changed. Md5 mismatch.");
-						}*/
-
 							StringBuilder sb = new StringBuilder();
 							foreach (Byte b in hash)
 								sb.Append(b.ToString("x2").ToLower());
@@ -93,16 +93,26 @@ namespace backup {
 								throw new ApplicationException("While file was encrypting it was changed. Md5 mismatch.");
 							}
 
-							//source.CopyTo(cs);
+							cs.Close();
+							result = destination.Position;
 						}
 					}
 				}
 			}
+			return result;
 		}
-		
-		public static void DecryptFile(string sourceFileName, string destinationFileName, string encryptionKey) {
+
+		public static long DecryptFile(string sourceFileName, string destinationFileName, string encryptionKey) {
+			//using (FileStream sourceStream = new FileStream(sourceFileName, FileMode.Open, FileAccess.Read, FileShare.Read)) {
+			using (FileStream sourceStream = IOHelper.OpenFile(sourceFileName, FileMode.Open, FileAccess.Read, FileShare.Read)) {
+				return DecryptFile(sourceStream, destinationFileName, encryptionKey);
+			}
+		}
+
+		public static long DecryptFile(Stream sourceStream, string destinationFileName, string encryptionKey) {
 			if (encryptionKey == null || encryptionKey.Length == 0)
 				throw new ArgumentException("encryptionKey");
+			long result = 0;
 			
 			using (var provider = new AesCryptoServiceProvider()) {
 				byte[] keyBytes = Sha128String(encryptionKey);
@@ -110,20 +120,27 @@ namespace backup {
 				provider.Key = keyBytes;
 				provider.Mode = CipherMode.CBC;
 				provider.Padding = PaddingMode.PKCS7;
-				using (FileStream source = new FileStream(sourceFileName, FileMode.Open, FileAccess.Read, FileShare.Read)) {
-					byte[] iv = new byte[16];
-					source.Read(iv, 0, provider.BlockSize / 8);
-					provider.IV = iv;
-					using (var decryptor = provider.CreateDecryptor(provider.Key, provider.IV)) {
-						using (var cs = new CryptoStream(source, decryptor, CryptoStreamMode.Read)) {
-							using (FileStream destination = new FileStream(destinationFileName, FileMode.CreateNew, FileAccess.Write, FileShare.None)) {
-								cs.CopyTo(destination);
+				byte[] iv = new byte[16];
+				sourceStream.Read(iv, 0, provider.BlockSize / 8);
+				provider.IV = iv;
+				using (var decryptor = provider.CreateDecryptor(provider.Key, provider.IV)) {
+					using (var cs = new CryptoStream(sourceStream, decryptor, CryptoStreamMode.Read)) {
+						//using (FileStream destination = new FileStream(destinationFileName, FileMode.CreateNew, FileAccess.Write, FileShare.None)) {
+						using (FileStream destination = IOHelper.OpenFile(destinationFileName, FileMode.CreateNew, FileAccess.Write, FileShare.None)) {
+							//cs.CopyTo(destination);
+							int num;
+							byte[] buffer = new byte[0x14000];
+							while ((num = cs.Read(buffer, 0, buffer.Length)) != 0) {
+								destination.Write(buffer, 0, num);
 							}
+
+							cs.Close();
+							result = destination.Position;
 						}
 					}
 				}
 			}
-			
+			return result;
 		}
 
 		private static byte[] Sha128String(string key) {
@@ -141,7 +158,7 @@ namespace backup {
 			StringBuilder sb = new StringBuilder();
 			MD5 md5Hasher = MD5.Create();
 
-			using (FileStream fs = File.Open(filePath, FileMode.Open, FileAccess.Read)) {
+			using (FileStream fs = IOHelper.OpenFile(filePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite)) {
 				int num;
 				bool finished = false;
 				byte[] buffer = new byte[0x14000];
@@ -176,23 +193,6 @@ namespace backup {
 
 			return sb.ToString();
 			//return md5Hasher.Hash;
-		}
-
-		public static string GetMd5_old(string filePath) {
-			StringBuilder sb = new StringBuilder();
-			MD5 md5Hasher = MD5.Create();
-			
-			try {
-				using (FileStream fs = File.OpenRead(filePath)) {
-					foreach (Byte b in md5Hasher.ComputeHash(fs))
-						sb.Append(b.ToString("x2").ToLower());
-				}
-			} catch (IOException exc) {
-				LOGGER.Error("IOException on "+filePath+" with message:"+exc.Message);
-				return null;
-			}
-			
-			return sb.ToString();
 		}
 
 	}

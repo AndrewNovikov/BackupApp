@@ -1,4 +1,4 @@
-using NLog;
+//using NLog;
 using System;
 using System.IO;
 using System.Net;
@@ -7,7 +7,7 @@ using System.Collections.Concurrent;
 using System.Net.FtpClient;
 
 namespace backup {
-	public class FtpUploader: Worker, IDisposable {
+	public class FtpUploader: BackupFileQueue, IDisposable {
 		//private static readonly Logger LOGGER = LogManager.GetCurrentClassLogger();
 
 		private static ConcurrentDictionary<int, FtpClient> locked = new ConcurrentDictionary<int, FtpClient>();
@@ -40,7 +40,7 @@ namespace backup {
 			//_connectionCreated = true;
 		}
 
-		public FtpUploader(uint maxThreadsCount): base(Upload, maxThreadsCount){
+		public FtpUploader(Action<BackupFile> onEnd, uint maxThreadsCount): base(Upload, onEnd, maxThreadsCount){
 		}
 
 		public void Dispose() {
@@ -49,7 +49,7 @@ namespace backup {
 
 			FtpClient connection;
 			while (unlocked.TryTake(out connection)) {
-				if (connection != null) { //strange but happened
+				if (connection != null) { //strange bug happened
 					if (connection.IsConnected) {
 						connection.Disconnect();
 					}
@@ -71,25 +71,38 @@ namespace backup {
 			}*/
 		}
 
-		private static FtpClient CreateConnection() {
-			//LOGGER.Info(unlocked.Count + " unlocked connections and " + locked.Count + " locked connections on CreateConnection");
+		#region "Ftp connections"
+		/*public static void PrepareFtpConnections(uint count) {
+			while (locked.Count + unlocked.Count < count) {
+				unlocked.Add(CreateConnection());
+			}
+		}*/
 
+		private static FtpClient CreateConnection() {
 			FtpClient conn = new FtpClient();
 			conn.Host = MainClass.BackupStore;
 			conn.DataConnectionType = FtpDataConnectionType.AutoActive;
 			conn.Credentials = new NetworkCredential(MainClass.FtpUser, MainClass.FtpPassword);
 			conn.EnableThreadSafeDataConnections = false;
+			//conn.Connect();
 			return conn;
 		}
 
 		private static int GetConnection(out FtpClient connection) {
 			FtpClient con;
+			bool unlockedTaken;
 			if (!unlocked.TryTake(out con)) {
 				con = CreateConnection();
+				unlockedTaken = false;
+			} else {
+				unlockedTaken = true;
 			}
 			int connectionId = System.Threading.Thread.CurrentThread.ManagedThreadId;
 			if (!locked.TryAdd(connectionId, con))
 				throw new ApplicationException("Ftp connection with id = " + connectionId + " is already locked.");
+
+			if (con == null) Console.WriteLine(connectionId + " threadId returns null connection (unlockedTaken = " + unlockedTaken + ") ("+locked.Count+" locked) and ("+unlocked.Count+" unlocked)");
+			else Console.WriteLine(connectionId + " threadId. GetConnection is good");
 
 			connection = con;
 			//LOGGER.Info(unlocked.Count + " unlocked connections and " + locked.Count + " locked connections on GetConnection in thread " + connectionId);
@@ -100,11 +113,14 @@ namespace backup {
 			FtpClient result;
 			if (!locked.TryRemove(connectionId, out result))
 				throw new ApplicationException("No ftp connection with id " + connectionId + " is locked.");
-			unlocked.Add(result);
+			if (result != null)
+				unlocked.Add(result);
 		}
+		#endregion
 
 		private static void Upload(BackupFile file) {
-			if (string.IsNullOrWhiteSpace(MainClass.BackupStore))
+			//try {
+			if (string.IsNullOrWhiteSpace(MainClass.BackupStore) || string.IsNullOrWhiteSpace(MainClass.Password))
 				return;
 
 			string dstFolder = file.Md5.Substring(0, 2);
@@ -117,12 +133,16 @@ namespace backup {
 					connection.CreateDirectory(dstFolder);
 				}
 				using (Stream ftpConn = connection.OpenWriteMultiple(dstFolder + '/' + dstFile)) {
-				//using (Stream ftpConn = connection.OpenWriteMultiple(file.Md5 + ".enc")) {
+					//using (Stream ftpConn = connection.OpenWriteMultiple(file.Md5 + ".enc")) {
 					Crypto.EncryptFile(file.Md5, file.FullName, ftpConn, MainClass.Password);
 				}
 			} finally {
 				ReleaseConnection(connectionId);
 			}
+			/*} catch (NullReferenceException exc) {
+				Console.WriteLine(exc.Message + " file == null = " + (file == null).ToString() + " md5==null=" + (file.Md5 == null));
+				throw;
+			}*/
 
 			/*FtpWebRequest request = (FtpWebRequest)WebRequest.Create(MainClass.BackupStore + file.Md5 + ".enc");
 			request.UsePassive = false;
