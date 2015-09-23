@@ -5,11 +5,15 @@ using System.Collections.Generic;
 //using System.Collections.Concurrent;
 
 namespace backup {
+	public delegate void BackupEventHandler(long resultLength, IBackupItem file);
+	public delegate void BackupErrorEventHandler(Exception exc, IBackupItem file);
+
 	public class BackupFileQueue: IDisposable {
 		private static readonly Logger LOGGER = LogManager.GetCurrentClassLogger();
+		private static readonly Logger QUEUE_LOGGER = LogManager.GetLogger("queue");
 		//private ConcurrentQueue<BackupFileQueued> _files = new ConcurrentQueue<BackupFileQueued>();
 		//private ConcurrentQueue<BackupFile> _files = new ConcurrentQueue<BackupFile>();
-		private Queue<BackupFile> _files = new Queue<BackupFile>();
+		private Queue<IBackupItem> _files = new Queue<IBackupItem>();
 		private ThreadStart _threadJob;
 		//private Action<BackupFile> _onEnd;
 		private readonly Dictionary<int, Worker> _allThreads = new Dictionary<int, Worker>();
@@ -21,44 +25,58 @@ namespace backup {
 		//private object _threadsLock = new object();
 		private bool disposing = false;
 		private uint _maxThreadsCount;
+		//private Func<IBackupEngine> _backupEngineConstructor;
 		//private bool _waitingThreads = false;
 		//private bool _working = false;
+		public event BackupEventHandler Success;
+		public event BackupErrorEventHandler Failure;
 
-		public BackupFileQueue(uint maxThreadsCount) {
+		public BackupFileQueue(uint maxThreadsCount, Func<IBackupEngine> backupEngineConstructor) {
 			_maxThreadsCount = maxThreadsCount;
+			//_backupEngineConstructor = backupEngineConstructor;
 
 			_threadJob = (() => {
 				int threadId = Thread.CurrentThread.ManagedThreadId;
 
-				IEncryptor enc = new FtpEncryptor();
+				IBackupEngine enc = backupEngineConstructor();
 
 				while (!disposing) {
-					BackupFile file;
+					IBackupItem file;
+					//Action<long> onSuccess;
 					lock(_files) {
+						QUEUE_LOGGER.Debug("ThreadId " + threadId + ": " + _files.Count + " files in a queue");
 						if (_files.Count > 0) {
+							//var fileAct = _files.Dequeue();
+							//file = fileAct.Key;
 							file = _files.Dequeue();
+							//onSuccess = fileAct.Value;
 						} else {
 							file = null;
+							//onSuccess = null;
 						}
 					}
-					//if (_files.TryDequeue(out file)) {
 					if (file != null) {
 						try {
-							//fileJob(file);
-							long encryptedLength = enc.Encrypt(file);
-							BackupFile.OnEncryptionEnds(file, encryptedLength);
-							/*if (_onEnd != null) {
-								_onEnd(file);
-							}*/
+							QUEUE_LOGGER.Debug("ThreadId " + threadId + ": File " + file.FullName + " dequeued. Will backup now...");
+
+							long encryptedLength = enc.Backup(file);
+							//long encryptedLength = 0;
+
+							QUEUE_LOGGER.Debug("ThreadId " + threadId + ": File " + file.FullName + " backed up, " + encryptedLength + " bytes");
+
+							OnSuccess(encryptedLength, file);
+
 						} catch (Exception exc) {
-							exc.WriteToLog("exception on job with file:" + file.FullName + ". ");
+							//exc.WriteToLog("ThreadId " + threadId + ": Exception on a job with file:" + file.FullName + ". ");
+							OnFailure(exc, file);
 						}
 					} else {
+						QUEUE_LOGGER.Debug("ThreadId " + threadId + ": Nothing in a queue.");
 						ToSleep(threadId);
 					}
 				}
 
-				LOGGER.Debug("disposing thread " + threadId);
+				QUEUE_LOGGER.Debug("ThreadId " + threadId + ":  Disposing...");
 
 				IDisposable encd = enc as IDisposable;
 				if (encd != null) {
@@ -70,6 +88,7 @@ namespace backup {
 					_threadsOnWork.Remove(Thread.CurrentThread.ManagedThreadId);
 				}
 
+				QUEUE_LOGGER.Debug("ThreadId " + threadId + ":  Disposed");
 				/*BackupFile file;
 				while (_files.TryDequeue(out file)) {
 					try {
@@ -89,6 +108,18 @@ namespace backup {
 			});
 		}
 
+		private void OnSuccess(long resultLength, IBackupItem file) {
+			if (Success != null) {
+				Success(resultLength, file);
+			}
+		}
+
+		private void OnFailure(Exception exc, IBackupItem file) {
+			if (Failure != null) {
+				Failure(exc, file);
+			}
+		}
+
 		public void Dispose() {
 			WaitAwaikedWorkers();
 			disposing = true;
@@ -102,7 +133,7 @@ namespace backup {
 					throw new ApplicationException("No worker with id " + id + " is on working now");
 				_threadsOnWork.Remove(id);
 				_threadsOnSleep.Enqueue(w);
-				LOGGER.Debug("threadId " + id + " will sleep");
+				QUEUE_LOGGER.Debug("ThreadId " + id + ": Will sleep");
 			}
 			w.Wh.WaitOne();
 		}
@@ -115,7 +146,7 @@ namespace backup {
 				if (avail) {
 					w = _threadsOnSleep.Dequeue();
 					_threadsOnWork.Add(w.Tr.ManagedThreadId, w);
-					LOGGER.Debug("threadId " + w.Tr.ManagedThreadId + " will be awaiked");
+					QUEUE_LOGGER.Debug("ThreadId " + w.Tr.ManagedThreadId + ": Will be awaiked");
 				} else {
 					w = null;
 				}
@@ -126,13 +157,19 @@ namespace backup {
 			return avail;
 		}
 
-		public void Add(BackupFile file) {
+		public bool Add(IBackupItem file) {
 			if (disposing)
 				throw new ApplicationException("Can not add file. Queue is in disposing state now.");
-			lock (_files) {
-				_files.Enqueue(file);
+			if (_maxThreadsCount > 0) {
+				lock (_files) {
+					_files.Enqueue(file);
+				}
+        QUEUE_LOGGER.Trace("File " + file.FullName + " md5=" + file.Data.MD5 + " is added to a queue");
+			} else {
+        QUEUE_LOGGER.Trace("File " + file.FullName + " md5=" + file.Data.MD5 + " will not be added to a queue. _maxThreadsCount=" + _maxThreadsCount);
 			}
 			Do();
+			return _maxThreadsCount > 0;
 		}
 
 		private void Do() {
@@ -148,7 +185,7 @@ namespace backup {
 					w = new Worker(newThread);
 					_allThreads.Add(newThread.ManagedThreadId, w);
 
-					LOGGER.Debug("threadId " + newThread.ManagedThreadId + " created with max " + _maxThreadsCount + " and " + _allThreads.Count + " created");
+					QUEUE_LOGGER.Debug("ThreadId " + newThread.ManagedThreadId + " created with max " + _maxThreadsCount + " and " + _allThreads.Count + " created");
 				}
 			}
 
@@ -163,40 +200,48 @@ namespace backup {
 		}
 
 		private void PushSleepWorkers() {
-			LOGGER.Debug("Pushing sleeped threads...");
+			QUEUE_LOGGER.Debug("Pushing sleeped threads...");
 			while (ToWork()) {
 			}
 		}
 
 		private void WaitAwaikedWorkers() {
 			Worker w;
-			LOGGER.Debug("Waiting running threads...");
+			QUEUE_LOGGER.Debug("Waiting running threads...");
 			while (TryGetAwaikedWorker(out w)) {
-				LOGGER.Debug("Waiting threadId " + w.Tr.ManagedThreadId + "...");
+				QUEUE_LOGGER.Debug("Waiting threadId " + w.Tr.ManagedThreadId + "...");
 				int total = 0;
 				const int waitMs = 5000;
+				//const int reCheckMs = 300000;
 				const int maxWait = 43200000; //21600000 - 6 hours; //10800000 - 3 hours; //3600000 - 1 hour; //43200000 - 12 hours timeout
 				if (w.Tr.IsAlive) {
-					LOGGER.Trace("Waiting for thread with id=" + w.Tr.ManagedThreadId + " and state=" + w.Tr.ThreadState + " with max " + maxWait + " ms...");
+					int reCheckIn = 0;
 					bool threadOnWork = true;
-					//while (w.Tr.ThreadState == ThreadState.Running !w.Tr.Join(waitMs) && total < maxWait) {
 					while (threadOnWork && total < maxWait) {
+						reCheckIn -= waitMs;
+						if (reCheckIn < 1) {
+							QUEUE_LOGGER.Trace("Waiting for thread with id=" + w.Tr.ManagedThreadId + " and state=" + w.Tr.ThreadState + " with max " + maxWait + " ms...");
+							reCheckIn = 600000; //10 minutes
+						}
+
 						Thread.Sleep(waitMs);
+
 						lock (_workSleepThreadsLock) {
 							threadOnWork = _threadsOnWork.ContainsKey(w.Tr.ManagedThreadId);
 						}
 						total += waitMs;
+
 					}
 					if (total >= maxWait) {
 						w.Tr.Abort();
-						LOGGER.Error("Thread not finished in " + maxWait + " milliseconds. Aborted.");
+						LOGGER.Error("Thread " + w.Tr.ManagedThreadId + " not finished in " + maxWait + " milliseconds. Aborted.");
 						//throw new ApplicationException("Thread not finished in " + maxWait + " milliseconds");
 					}
 				} else {
 					throw new ApplicationException("Thread id=" + w.Tr.ManagedThreadId + " is in a _threadsOnWork and is not in IsAlive state. ThreadState=" + w.Tr.ThreadState);
 				}
 			}
-			LOGGER.Debug("All running threads are done");
+			QUEUE_LOGGER.Debug("All running threads are done");
 		}
 
 		private bool TryGetAwaikedWorker(out Worker w) {
@@ -211,6 +256,25 @@ namespace backup {
 				}
 			}
 			return result;
+		}
+
+
+		class Worker {
+
+			public Thread Tr {
+				get;
+				private set;
+			}
+
+			public EventWaitHandle Wh {
+				get;
+				private set;
+			}
+
+			public Worker(Thread thread) {
+				Wh = new AutoResetEvent(false);
+				Tr = thread;
+			}
 		}
 
 	}

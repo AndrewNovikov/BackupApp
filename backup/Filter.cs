@@ -10,6 +10,29 @@ namespace backup {
 		public Filter() {
 		}
 
+		public override int GetHashCode() {
+			int result = 0;
+			foreach (Regex f in _filters) {
+				result = result ^ f.GetHashCode();
+			}
+			return result;
+		}
+
+		/*public static implicit operator Filter(string str) {
+			Filter result = new Filter();
+			result.Set(str);
+			return result;
+		}
+
+		public static implicit operator string(Filter filter) {
+			string result = string.Empty;
+			string separator = string.Empty;
+			foreach (Regex filterR in filter._filters) {
+				result += separator + filterR.ToString();
+			}
+			return result;
+		}*/
+
 		public void Set(string filters) {
 			if (!string.IsNullOrEmpty(filters)) {
 				string[] filtersStr = filters.Split('|');

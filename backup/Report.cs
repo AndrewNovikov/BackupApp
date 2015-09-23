@@ -16,6 +16,10 @@ namespace backup {
 		private static readonly object lock_totalSendUnencryptedFilesLength = new object();
 		private long totalSendEncryptedFilesLength;
 		private static readonly object lock_totalSendEncryptedFilesLength = new object();
+    private long totalMillisecondsOnHashing;
+    private static readonly object lock_totalMillisecondsOnHashing = new object();
+    private long totalFilesHashed;
+    private static readonly object lock_totalFilesHashed = new object();
 
 		public long ScannedFilesCount {
 			get {
@@ -65,6 +69,18 @@ namespace backup {
 			}
 		}
 
+    public long TotalFilesHashed {
+      get {
+        return totalFilesHashed;
+      }
+    }
+
+    public long TotalMillisecondsOnHashing {
+      get {
+        return totalMillisecondsOnHashing;
+      }
+    }
+
 		public Report() {
 			startTime = DateTime.Now;
 		}
@@ -78,6 +94,18 @@ namespace backup {
 		public void IncrementScannedFilesLength(long length) {
 			lock (lock_totalScannedFilesLength) {
 				totalScannedFilesLength += length;
+			}
+		}
+
+    public void IncrementTotalFilesHashed() {
+      lock (lock_totalFilesHashed) {
+        totalFilesHashed++;
+      }
+    }
+
+    public void IncrementTotalMillisecondsOnHashing(long ms) {
+			lock (lock_totalMillisecondsOnHashing) {
+        totalMillisecondsOnHashing += ms;
 			}
 		}
 

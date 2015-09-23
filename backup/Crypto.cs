@@ -4,38 +4,41 @@ using System.IO;
 using System.Text;
 using System.Linq;
 using System.Security.Cryptography;
+using NLog;
+using System.Diagnostics;
 
 namespace backup {
 	public static class Crypto {
-		//private static readonly Logger LOGGER = LogManager.GetCurrentClassLogger();
+    private static readonly Logger PROFILER_LOGGER = LogManager.GetLogger("profiler");
+    //private static readonly Logger LOGGER = LogManager.GetCurrentClassLogger();
 		//private static readonly string EmptyMd5 = "00000000000000000000000000000000";
 		public static readonly byte[] EmptyMd5 = new byte[] {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0};
+		public static readonly string EmptyMd5Str = "00000000000000000000000000000000";
 
-		private static string _emptyMd5;
-		public static string EmptyMd5Str {
-			get {
-				if (_emptyMd5 == null) {
-					StringBuilder sb = new StringBuilder();
-					foreach (Byte b in EmptyMd5)
-						sb.Append(b.ToString("x2").ToLower());
-					_emptyMd5 = sb.ToString();
-				}
-				return _emptyMd5;
-			}
-		}
+		//private static string _emptyMd5;
+		//public static string EmptyMd5Str {
+		//  get {
+		//    if (_emptyMd5 == null) {
+		//      StringBuilder sb = new StringBuilder();
+		//      foreach (Byte b in EmptyMd5)
+		//        sb.Append(b.ToString("x2").ToLower());
+		//      _emptyMd5 = sb.ToString();
+		//    }
+		//    return _emptyMd5;
+		//  }
+		//}
 
 		public static long EncryptFile(string md5, string sourceFileName, Stream destinationStream, string encryptionKey) {
-			//using (FileStream source = new FileStream(sourceFileName, FileMode.Open, FileAccess.Read, FileShare.Read)) {
-      using (FileStream source = IOHelper.OpenFile(sourceFileName, FileMode.Open, FileAccess.Read, FileShare.ReadWrite)) {
+			//using (FileStream source = IOHelper.OpenFile(sourceFileName, FileMode.Open, FileAccess.Read, FileShare.ReadWrite)) {
+			using (FileStream source = IOHelper.OpenFile(sourceFileName, FileMode.Open, FileAccess.Read, FileShare.Read)) {
 				return InternalEncryptFile(md5, source, destinationStream, encryptionKey);
 			}
 		}
 
 		public static long EncryptFile(string md5, string sourceFileName, string destinationFileName, string encryptionKey) {
-			//using (FileStream source = new FileStream(sourceFileName, FileMode.Open, FileAccess.Read, FileShare.Read)) {
-      using (FileStream source = IOHelper.OpenFile(sourceFileName, FileMode.Open, FileAccess.Read, FileShare.ReadWrite)) {
-				//using (FileStream destination = new FileStream(destinationFileName, FileMode.CreateNew, FileAccess.Write, FileShare.None)) {
-        using (FileStream destination = IOHelper.OpenFile(destinationFileName, FileMode.CreateNew, FileAccess.Write, FileShare.None)) {
+			//using (FileStream source = IOHelper.OpenFile(sourceFileName, FileMode.Open, FileAccess.Read, FileShare.ReadWrite)) {
+			using (FileStream source = IOHelper.OpenFile(sourceFileName, FileMode.Open, FileAccess.Read, FileShare.Read)) {
+				using (FileStream destination = IOHelper.OpenFile(destinationFileName, FileMode.CreateNew, FileAccess.Write, FileShare.None)) {
 					return InternalEncryptFile(md5, source, destination, encryptionKey);
 				}
 			}
@@ -52,52 +55,68 @@ namespace backup {
 				provider.Key = keyBytes;
 				provider.Mode = CipherMode.CBC;
 				provider.Padding = PaddingMode.PKCS7;
-				using (MD5 md5Hasher = MD5.Create()) {
-					bool finished = false;
-					using (var encryptor = provider.CreateEncryptor(provider.Key, provider.IV)) {
-						using (var cs = new CryptoStream(destination, encryptor, CryptoStreamMode.Write)) {
-							destination.Write(provider.IV, 0, provider.BlockSize / 8);
 
-							int num;
-							byte[] buffer = new byte[0x14000];
-							while ((num = source.Read(buffer, 0, buffer.Length)) != 0) {
-								if (finished) {
-									throw new ApplicationException("Not suppose to be here. Encryption must be done by now");
-								}
+				//using (MD5 md5Hasher = MD5.Create()) {
+				//  bool finished = false;
+				//  using (var encryptor = provider.CreateEncryptor(provider.Key, provider.IV)) {
+				//    using (var cs = new CryptoStream(destination, encryptor, CryptoStreamMode.Write)) {
+				//      destination.Write(provider.IV, 0, provider.BlockSize / 8);
 
-								if (source.Position < source.Length) {
-									md5Hasher.TransformBlock(buffer, 0, num, null, 0);
-								} else {
-									md5Hasher.TransformFinalBlock(buffer, 0, num);
-									finished = true;
-								}
+				//      int num;
+				//      byte[] buffer = new byte[0x14000];
+				//      while ((num = source.Read(buffer, 0, buffer.Length)) != 0) {
+				//        if (finished) {
+				//          throw new ApplicationException("Not suppose to be here. Encryption must be done by now");
+				//        }
 
-								cs.Write(buffer, 0, num);
-							}
+				//        if (source.Position < source.Length) {
+				//          md5Hasher.TransformBlock(buffer, 0, num, null, 0);
+				//        } else {
+				//          md5Hasher.TransformFinalBlock(buffer, 0, num);
+				//          finished = true;
+				//        }
 
-							byte[] hash;
-							if (finished) {
-								hash = md5Hasher.Hash;
-							} else {
-								if (source.Length == 0)
-									hash = EmptyMd5;
-								else
-									throw new ApplicationException("During calculating md5 no finish of file has been reached");
-							}
+				//        cs.Write(buffer, 0, num);
+				//      }
 
-							StringBuilder sb = new StringBuilder();
-							foreach (Byte b in hash)
-								sb.Append(b.ToString("x2").ToLower());
+				//      byte[] hash;
+				//      if (finished) {
+				//        hash = md5Hasher.Hash;
+				//      } else {
+				//        if (source.Length == 0)
+				//          hash = EmptyMd5;
+				//        else
+				//          throw new ApplicationException("During calculating md5 no finish of file has been reached");
+				//      }
 
-							if (sb.ToString() != md5) {
-								throw new ApplicationException("While file was encrypting it was changed. Md5 mismatch.");
-							}
+				//      StringBuilder sb = new StringBuilder();
+				//      foreach (Byte b in hash)
+				//        sb.Append(b.ToString("x2").ToLower());
 
-							cs.Close();
-							result = destination.Position;
+				//      if (sb.ToString() != md5) {
+				//        throw new ApplicationException("While file was encrypting it was changed. Md5 mismatch.");
+				//      }
+
+				//      cs.Close();
+				//      result = destination.Position;
+				//    }
+				//  }
+				//}
+
+				using (var encryptor = provider.CreateEncryptor(provider.Key, provider.IV)) {
+					using (var cs = new CryptoStream(destination, encryptor, CryptoStreamMode.Write)) {
+						destination.Write(provider.IV, 0, provider.BlockSize / 8);
+
+						int num;
+						byte[] buffer = new byte[0x14000];
+						while ((num = source.Read(buffer, 0, buffer.Length)) != 0) {
+							cs.Write(buffer, 0, num);
 						}
+						cs.Close();
+						result = destination.Position;
 					}
 				}
+
 			}
 			return result;
 		}
@@ -154,45 +173,71 @@ namespace backup {
 			}
 		}
 
+		//public static string GetMd5(string filePath) {
+		//  StringBuilder sb = new StringBuilder();
+		//  MD5 md5Hasher = MD5.Create();
+
+		//  using (FileStream fs = IOHelper.OpenFile(filePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite)) {
+		//    int num;
+		//    bool finished = false;
+		//    byte[] buffer = new byte[0x14000];
+		//    while ((num = fs.Read(buffer, 0, buffer.Length)) != 0) {
+		//      if (finished) {
+		//        throw new ApplicationException("Not suppose to be here. Hashing must be done by now");
+		//      }
+		//      if (fs.Position < fs.Length) {
+		//        md5Hasher.TransformBlock(buffer, 0, num, null, 0);
+		//      } else {
+		//        md5Hasher.TransformFinalBlock(buffer, 0, num);
+		//        finished = true;
+		//      }
+		//    }
+
+		//    /*if (!finished) {
+		//      if (fs.Length == 0) return EmptyMd5;
+		//      else throw new ApplicationException("During calculating md5 no finish of file has been reached");
+		//    }*/
+		//    byte[] hash;
+		//    if (finished) {
+		//      hash = md5Hasher.Hash;
+		//    } else {
+		//      if (fs.Length == 0) hash = EmptyMd5;
+		//      else throw new ApplicationException("During calculating md5 no finish of file has been reached");
+		//    }
+
+		//    foreach (Byte b in hash)
+		//      sb.Append(b.ToString("x2").ToLower());
+
+		//  }
+		//  string result = sb.ToString();
+
+		//  //string md5New = GetMd5New(filePath);
+
+		//  //if (result != md5New)
+		//  //  throw new ApplicationException("Exception on md5 calculation");
+		//  //LOGGER.Trace("Count of md5 for file " + filePath + " is done (" + result + ")");
+		//  return result;
+		//  //return md5Hasher.Hash;
+		//}
+
+		static MD5 md5 = MD5.Create();
 		public static string GetMd5(string filePath) {
+      Stopwatch sw = Stopwatch.StartNew();
 			StringBuilder sb = new StringBuilder();
-			MD5 md5Hasher = MD5.Create();
 
-			using (FileStream fs = IOHelper.OpenFile(filePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite)) {
-				int num;
-				bool finished = false;
-				byte[] buffer = new byte[0x14000];
-				while ((num = fs.Read(buffer, 0, buffer.Length)) != 0) {
-					if (finished) {
-						throw new ApplicationException("Not suppose to be here. Hashing must be done by now");
-					}
-					if (fs.Position < fs.Length) {
-						md5Hasher.TransformBlock(buffer, 0, num, null, 0);
-					} else {
-						md5Hasher.TransformFinalBlock(buffer, 0, num);
-						finished = true;
-					}
-				}
-
-				/*if (!finished) {
-					if (fs.Length == 0) return EmptyMd5;
-					else throw new ApplicationException("During calculating md5 no finish of file has been reached");
-				}*/
-				byte[] hash;
-				if (finished) {
-					hash = md5Hasher.Hash;
-				} else {
-					if (fs.Length == 0) hash = EmptyMd5;
-					else throw new ApplicationException("During calculating md5 no finish of file has been reached");
-				}
-
-				foreach (Byte b in hash)
-					sb.Append(b.ToString("x2").ToLower());
-
+			byte[] retVal;
+			using (FileStream file = IOHelper.OpenFile(filePath, FileMode.Open, FileAccess.Read, FileShare.Read)) {
+				retVal = md5.ComputeHash(file);
 			}
 
+			foreach (Byte b in retVal)
+				sb.Append(b.ToString("x2").ToLower());
+
+      sw.Stop();
+      MainClass.Stat.IncrementTotalFilesHashed();
+      MainClass.Stat.IncrementTotalMillisecondsOnHashing(sw.ElapsedMilliseconds);
+      PROFILER_LOGGER.Info("GetMd5 took: {0}ms for file '{1}'", sw.ElapsedMilliseconds, filePath);
 			return sb.ToString();
-			//return md5Hasher.Hash;
 		}
 
 	}

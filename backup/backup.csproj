@@ -1,8 +1,8 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <PropertyGroup>
     <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
-    <Platform Condition=" '$(Platform)' == '' ">x86</Platform>
+    <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
     <ProductVersion>10.0.0</ProductVersion>
     <SchemaVersion>2.0</SchemaVersion>
     <ProjectGuid>{2AF7D34D-76B3-43DB-A3C6-AFAF8129242D}</ProjectGuid>
@@ -16,12 +16,12 @@
     <DebugType>full</DebugType>
     <Optimize>False</Optimize>
     <OutputPath>bin\Debug</OutputPath>
-    <DefineConstants>DEBUG;</DefineConstants>
+    <DefineConstants>DEBUG</DefineConstants>
     <ErrorReport>prompt</ErrorReport>
     <WarningLevel>4</WarningLevel>
     <Externalconsole>True</Externalconsole>
     <PlatformTarget>x86</PlatformTarget>
-    <Commandlineparameters>-restore 260 /home/andrew/recovered /raid/data/FES_descr/География/</Commandlineparameters>
+    <UseVSHostingProcess>true</UseVSHostingProcess>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|x86' ">
     <DebugType>none</DebugType>
@@ -30,64 +30,104 @@
     <ErrorReport>prompt</ErrorReport>
     <WarningLevel>4</WarningLevel>
     <Externalconsole>True</Externalconsole>
-    <PlatformTarget>x86</PlatformTarget>
+    <PlatformTarget>AnyCPU</PlatformTarget>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
+    <DebugSymbols>true</DebugSymbols>
+    <DebugType>full</DebugType>
+    <Optimize>false</Optimize>
+    <OutputPath>bin\Debug\</OutputPath>
+    <DefineConstants>DEBUG;TRACE</DefineConstants>
+    <ErrorReport>prompt</ErrorReport>
+    <WarningLevel>4</WarningLevel>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
+    <DebugType>pdbonly</DebugType>
+    <Optimize>true</Optimize>
+    <OutputPath>bin\Release\</OutputPath>
+    <DefineConstants>TRACE</DefineConstants>
+    <ErrorReport>prompt</ErrorReport>
+    <WarningLevel>4</WarningLevel>
+    <UseVSHostingProcess>true</UseVSHostingProcess>
   </PropertyGroup>
   <ItemGroup>
     <Reference Include="System" />
     <Reference Include="System.Data" />
     <Reference Include="System.Core" />
     <Reference Include="System.Configuration" />
-    <Reference Include="System.Net.FtpClient">
-      <HintPath>lib\System.Net.FtpClient.dll</HintPath>
-    </Reference>
     <Reference Include="System.Xml" />
     <Reference Include="NLog">
       <HintPath>lib\NLog.dll</HintPath>
     </Reference>
-    <Reference Include="MySql.Data">
-      <HintPath>lib\MySql.Data.dll</HintPath>
+    <Reference Include="System.Runtime.Remoting" />
+    <Reference Include="Mono.Posix">
+      <HintPath>lib\Mono.Posix.dll</HintPath>
+      <Private>True</Private>
     </Reference>
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="BackupDb.cs" />
+    <Compile Include="Data\MSSQLDAL.cs" />
+    <Compile Include="FsInfo.cs" />
+    <Compile Include="Data\IDAL.cs" />
+    <Compile Include="IRecoverer.cs" />
     <Compile Include="Main.cs" />
     <Compile Include="AssemblyInfo.cs" />
-    <Compile Include="Helper.cs" />
+    <Compile Include="Extensions\Helper.cs" />
     <Compile Include="Crypto.cs" />
-    <Compile Include="BackupFile.cs" />
-    <Compile Include="BackupFolder.cs" />
-    <Compile Include="BackupItem.cs" />
     <Compile Include="BackupFileQueue.cs" />
-    <Compile Include="Worker.cs" />
-    <Compile Include="FtpEncryptor.cs" />
-    <Compile Include="DALBasic.cs" />
-    <Compile Include="DAL.cs" />
-    <Compile Include="FileSystemCache.cs" />
+    <Compile Include="BackupEngines\FtpEncryptor.cs" />
+    <Compile Include="Model\DataInfo.cs" />
+    <Compile Include="Model\FileRecord.cs" />
     <Compile Include="Report.cs" />
     <Compile Include="Filter.cs" />
     <Compile Include="RecoverInfo.cs" />
-    <Compile Include="IEncryptor.cs" />
-    <Compile Include="IDecryptor.cs" />
     <Compile Include="FtpDecryptor.cs" />
     <Compile Include="FtpController.cs" />
-    <Compile Include="RecoverPathException.cs" />
-    <Compile Include="PathToClean.cs" />
     <Compile Include="PInvokeHelper.cs" />
-    <Compile Include="IOHelper.cs" />
+    <Compile Include="Extensions\IOHelper.cs" />
+    <Compile Include="ApplSettings.cs" />
+    <Compile Include="MyEncryptionStream.cs" />
+    <Compile Include="FsScanner.cs" />
+    <Compile Include="Status.cs" />
+    <Compile Include="IBackupItem.cs" />
+    <Compile Include="BackupEngines\IBackupEngine.cs" />
+    <Compile Include="BackupEngines\LocalBackup.cs" />
+    <Compile Include="FileRecordController.cs" />
+    <Compile Include="Data\DAL.cs" />
+    <Compile Include="Tuple.cs" />
   </ItemGroup>
   <Import Project="$(MSBuildBinPath)\Microsoft.CSharp.targets" />
   <ItemGroup>
     <None Include="NLog.config">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <SubType>Designer</SubType>
     </None>
     <None Include="app.config">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <SubType>Designer</SubType>
     </None>
     <None Include="lib\NLog.dll" />
     <None Include="lib\MySql.Data.dll" />
     <None Include="lib\System.Net.FtpClient.dll" />
     <None Include="lib\log4net.dll" />
+    <None Include="lib\MySqlBackup.dll" />
   </ItemGroup>
   <ItemGroup>
-    <Folder Include="lib\" />
+    <ProjectReference Include="..\..\FtpClient\source\System.Net.FtpClient.NET2.csproj">
+      <Project>{2e4f2a25-7133-455a-ac1d-fbe3e56ca1a1}</Project>
+      <Name>System.Net.FtpClient.NET2</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\..\Linker\LinkerService\LinkerService.csproj">
+      <Project>{0e14ea0d-bb64-43c6-bea4-a81f6c369687}</Project>
+      <Name>LinkerService</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\DynamicProxy\DynamicProxy.csproj">
+      <Project>{eb1416be-6a9d-45dc-a21f-426f799b7ef8}</Project>
+      <Name>DynamicProxy</Name>
+    </ProjectReference>
+  </ItemGroup>
+  <ItemGroup>
+    <Content Include="readme.txt" />
   </ItemGroup>
 </Project>

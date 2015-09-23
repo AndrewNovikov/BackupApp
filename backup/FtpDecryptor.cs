@@ -4,7 +4,7 @@ using System.IO;
 using System.Net.FtpClient;
 
 namespace backup {
-	public class FtpDecryptor: FtpController, IDecryptor, IDisposable {
+	public class FtpDecryptor: FtpController, IRecoverer, IDisposable {
 		private static readonly Logger LOGGER = LogManager.GetCurrentClassLogger();
 
 		public FtpDecryptor():base() {
@@ -14,10 +14,10 @@ namespace backup {
 			base.Dispose();
 		}*/
 
-		public long Decrypt(string md5, string targetPath) {
+		public long Recover(string md5, string targetPath) {
 			if (string.IsNullOrEmpty(targetPath))
 				throw new ApplicationException("No target to restore");
-			if (string.IsNullOrEmpty(MainClass.Password))
+			if (string.IsNullOrEmpty(MainClass.Settings.FtpEncryptor.Password))
 				throw new ApplicationException("No password to decrypt");
 			
 			return IntDecrypt(0, md5, targetPath);
@@ -40,7 +40,7 @@ namespace backup {
 						}
 					}*/
 
-					decryptedLength = Crypto.DecryptFile(ftpConn, targetPath, MainClass.Password);
+					decryptedLength = Crypto.DecryptFile(ftpConn, targetPath, MainClass.Settings.FtpEncryptor.Password);
 				}
 				return decryptedLength;
 			} catch (Exception exc) {

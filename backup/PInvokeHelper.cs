@@ -8,6 +8,9 @@ using Microsoft.Win32.SafeHandles;
 namespace backup.PInvoke {
 
 	internal static class PInvokeHelper	{
+		[DllImport("kernel32.dll")]
+		internal static extern bool CreateSymbolicLink(string lpSymlinkFileName, string lpTargetFileName, SymbolicLinkType dwFlags);
+
 		// http://zetalongpaths.codeplex.com/Thread/View.aspx?ThreadId=230652&ANCHOR#Post557779
 		internal const int MAX_PATH = 250;
 		
@@ -249,6 +252,11 @@ namespace backup.PInvoke {
 		internal static extern uint GetLastError();
 	}
 
+	public enum SymbolicLinkType {
+		File = 0,
+		Directory = 1
+	}
+
 	[Flags]
 	public enum FileAccess : uint
 	{
@@ -280,13 +288,13 @@ namespace backup.PInvoke {
 		FILE_ATTRIBUTE_HIDDEN = 0x00000002,
 	}*/
 
-  [Flags]
-  public enum FileShare : uint {
-    None = 0x00000000,
-    Read = 0x00000001,
-    Write = 0x00000002,
-    Delete = 0x00000004,
-  }
+	[Flags]
+	public enum FileShare : uint {
+		None = 0x00000000,
+		Read = 0x00000001,
+		Write = 0x00000002,
+		Delete = 0x00000004,
+	}
 	
 	public enum CreationDisposition : uint
 	{
